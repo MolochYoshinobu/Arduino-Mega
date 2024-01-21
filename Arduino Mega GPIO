@@ -1,0 +1,166 @@
+#include <Arduino_FreeRTOS.h>
+#include <avr/io.h>
+
+int Out_Pins[]={2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17};//},18,19};
+int Pin_St[]=  {0,0,0,0,0,0,0,0, 0, 0, 0,0 ,0 , 0, 0, 0};//, 0, 0};
+unsigned long duration;
+int Mode;
+#define OUT_OF_PINS       ( sizeof(Out_Pins) / sizeof(int) )
+
+void setup() {  
+  pinMode(A0,INPUT_PULLUP); 
+  Serial.begin(115200);
+  Serial.setTimeout(100);
+  Mode=digitalRead(A0);
+  switch (Mode){
+    case 0:
+      for (int i=2; i< 54; i++)  {
+        pinMode(i,OUTPUT);
+        digitalWrite(i,LOW); 
+      }
+      break;
+    case 1:
+      Serial.println("******************************");
+      Serial.println("*  TTL H/L TEST KIT(+5V OUT) *");
+      Serial.println("*                            *");
+      Serial.println("*        Created by KAWABATA *");
+      Serial.println("******************************");
+      Pin_All_Print();
+      for (int i=0; i< OUT_OF_PINS; i++)  {
+        pinMode(Out_Pins[i],OUTPUT);
+        Pin_St[i]=0;
+        digitalWrite(Out_Pins[i],LOW);
+      }
+  }
+}
+
+void Pin_DataWrite(int SetPin,int SetSt){
+  char buf[50];
+  switch (SetSt){
+    case 0:
+      digitalWrite(Out_Pins[SetPin],LOW);
+      Pin_St[SetPin]=0;
+      break;
+    case 1:
+      digitalWrite(Out_Pins[SetPin],HIGH);
+      Pin_St[SetPin]=1;
+      break;
+    default:
+      Serial.println("INPUT DATA　ERROR");
+  }
+}
+
+void Pin_All_Print(){
+  char buf[50];
+    Serial.println();
+    Serial.println("PinNo |D0|D1|D2|D3|D4|D5|D6|D7|D8|D9|D10|D11|D12|D13|D14|D15|");
+    Serial.println("PosNo | 2| 3| 4| 5| 6| 7| 8| 9|10|11| 12| 13| A0| A1| A2| A3|");
+    Serial.print("OUTPUT|");
+  for(int i=0;i<=9;i++){
+    sprintf(buf," %d|",Pin_St[i]);
+    Serial.print(buf);
+  }
+  for(int i=10;i<= OUT_OF_PINS-1 ;i++){
+    sprintf(buf," %d |",Pin_St[i]);
+    Serial.print(buf);
+  }
+  Serial.println();
+  Serial.print("->");  
+}
+
+String Serialread_func(){
+  String input_data;
+  String output_data;
+  while(1){
+    if (Serial.available() > 0 ) {
+      input_data =Serial.readString();
+      //Serial.println(input_data.lastIndexOf("\r"));
+     Serial.print(input_data);
+      if (input_data == "\b"){
+       Serial.print("\033[0K");
+        output_data = output_data.substring(0, output_data.length() - 1);
+        input_data = "";
+      }
+      else if (input_data.endsWith("\r")) {
+        if (output_data == "") {
+          if(input_data.lastIndexOf("\r")==0){
+            switch (Mode){
+              case 0:
+                Serial.println("->");
+                break;
+              case 1:
+                Serial.println();
+                Serial.print("->");
+            }
+          }else{
+            output_data = input_data;
+            Serial.println();
+            return output_data;
+            break;
+          }
+        }
+        else {
+         Serial.println();
+          return output_data;
+          break;
+        }
+      }
+    else {
+      output_data = output_data + input_data;
+      }
+    }     
+  }
+}
+
+void loop() {
+    String s;
+    int St;
+    int i;
+    String recv = Serialread_func(); 
+    switch (Mode){
+        case 0:
+          if(recv != NULL){
+            if(recv.startsWith("S")){
+                  s =recv.substring(1,recv.indexOf("="));
+                  int No = s.toInt();
+                  s= recv.substring(recv.indexOf("=")+1,recv.indexOf("=")+2);
+                  St= s.toInt();
+                  digitalWrite(No,St);
+                  Serial.println("->");
+            }else if(recv.startsWith("ALL0")){
+                  for (int i=2; i< 54; i++)  {
+                    digitalWrite(i,LOW);
+                  }
+                  Serial.println("->");
+              }
+          }
+            break;
+        case 1:
+          if(recv != NULL){
+            if(recv.startsWith("D")){
+              if(recv.indexOf("-")>1){
+                s =recv.substring(1,recv.indexOf("-"));
+                int Start_No = s.toInt();
+                s =recv.substring(recv.indexOf("-")+1,recv.indexOf("="));
+                int End_No = s.toInt();
+                s= recv.substring(recv.indexOf("=")+1,recv.indexOf("=")+2);
+                St= s.toInt();
+                  if(Start_No<End_No){
+                    for(i=Start_No;i<=End_No;i++){
+                    Pin_DataWrite(i,St);
+                    }
+                  }else{
+                    Serial.println("INPUT DATA　ERROR");
+                  }
+                }else{
+                  s =recv.substring(1,recv.indexOf("="));
+                  int No = s.toInt();
+                  s= recv.substring(recv.indexOf("=")+1,recv.indexOf("=")+2);
+                  St= s.toInt();
+                  Pin_DataWrite(No,St);
+                }
+                Pin_All_Print();   
+              }
+            }
+          }  
+}
