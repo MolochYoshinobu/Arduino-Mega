@@ -1,80 +1,22 @@
-#include <Arduino_FreeRTOS.h>
-#include <avr/io.h>
-
-int Out_Pins[]={2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17};//},18,19};
-int Pin_St[]=  {0,0,0,0,0,0,0,0, 0, 0, 0,0 ,0 , 0, 0, 0};//, 0, 0};
-unsigned long duration;
-int Mode;
-#define OUT_OF_PINS       ( sizeof(Out_Pins) / sizeof(int) )
+ #include <avr/io.h>
 
 void setup() {  
-  pinMode(A0,INPUT_PULLUP); 
   Serial.begin(115200);
   Serial.setTimeout(100);
-  Mode=digitalRead(A0);
-  switch (Mode){
-    case 0:
-      for (int i=2; i< 54; i++)  {
-        pinMode(i,OUTPUT);
-        digitalWrite(i,LOW); 
-      }
-      break;
-    case 1:
-      Serial.println("******************************");
-      Serial.println("*  TTL H/L TEST KIT(+5V OUT) *");
-      Serial.println("*                            *");
-      Serial.println("*        Created by KAWABATA *");
-      Serial.println("******************************");
-      Pin_All_Print();
-      for (int i=0; i< OUT_OF_PINS; i++)  {
-        pinMode(Out_Pins[i],OUTPUT);
-        Pin_St[i]=0;
-        digitalWrite(Out_Pins[i],LOW);
-      }
+  for (int i=2; i<70; i++)  {
+    pinMode(i,OUTPUT);
+    digitalWrite(i,LOW); 
   }
-}
-
-void Pin_DataWrite(int SetPin,int SetSt){
-  char buf[50];
-  switch (SetSt){
-    case 0:
-      digitalWrite(Out_Pins[SetPin],LOW);
-      Pin_St[SetPin]=0;
-      break;
-    case 1:
-      digitalWrite(Out_Pins[SetPin],HIGH);
-      Pin_St[SetPin]=1;
-      break;
-    default:
-      Serial.println("INPUT DATA　ERROR");
-  }
-}
-
-void Pin_All_Print(){
-  char buf[50];
-    Serial.println();
-    Serial.println("PinNo |D0|D1|D2|D3|D4|D5|D6|D7|D8|D9|D10|D11|D12|D13|D14|D15|");
-    Serial.println("PosNo | 2| 3| 4| 5| 6| 7| 8| 9|10|11| 12| 13| A0| A1| A2| A3|");
-    Serial.print("OUTPUT|");
-  for(int i=0;i<=9;i++){
-    sprintf(buf," %d|",Pin_St[i]);
-    Serial.print(buf);
-  }
-  for(int i=10;i<= OUT_OF_PINS-1 ;i++){
-    sprintf(buf," %d |",Pin_St[i]);
-    Serial.print(buf);
-  }
-  Serial.println();
-  Serial.print("->");  
+  digitalWrite(54,HIGH);  
 }
 
 String Serialread_func(){
   String input_data;
   String output_data;
+
   while(1){
     if (Serial.available() > 0 ) {
-      input_data =Serial.readString();
-      //Serial.println(input_data.lastIndexOf("\r"));
+     input_data =Serial.readString();
      Serial.print(input_data);
       if (input_data == "\b"){
        Serial.print("\033[0K");
@@ -84,14 +26,8 @@ String Serialread_func(){
       else if (input_data.endsWith("\r")) {
         if (output_data == "") {
           if(input_data.lastIndexOf("\r")==0){
-            switch (Mode){
-              case 0:
-                Serial.println("->");
-                break;
-              case 1:
                 Serial.println();
                 Serial.print("->");
-            }
           }else{
             output_data = input_data;
             Serial.println();
@@ -112,55 +48,165 @@ String Serialread_func(){
   }
 }
 
+static inline void ASM_delayMicro(uint32_t n){
+  asm volatile (
+    "mov __tmp_reg__, %[loop] ; We use the mov as the value is already in a register. \n\t"
+    "1: \n\t"
+    "dec __tmp_reg__ \n\t"
+    "brne 1b ; Branch to marker 1 backwards\n\t" 
+    :
+    : [loop]     "r"  (n)
+  );
+}
+
 void loop() {
-    String s;
-    int St;
-    int i;
+  String s,Writedata;
+  int i,j,k,No,St,strlen; 
+  char charBuf[23];
+  int Pin_St2[100];
+  int Pin_Dt2[100];
+  String recvD;
+  uint16_t Data;
+  long St_1Shot[2];
     String recv = Serialread_func(); 
-    switch (Mode){
-        case 0:
           if(recv != NULL){
             if(recv.startsWith("S")){
                   s =recv.substring(1,recv.indexOf("="));
-                  int No = s.toInt();
+                  No = s.toInt();
                   s= recv.substring(recv.indexOf("=")+1,recv.indexOf("=")+2);
                   St= s.toInt();
                   digitalWrite(No,St);
-                  Serial.println("->");
+                  Serial.print("->");
+            }else if(recv.startsWith("1SHOT1")){
+                  s =recv.substring(7,recv.indexOf(","));
+                  St_1Shot[0]=s.toInt();
+                  if(St_1Shot[0]>53&&St_1Shot[0]<71){
+                    No=St_1Shot[0]-54;
+                    s =recv.substring(recv.lastIndexOf(",")+1,recv.length()-1);
+                    St_1Shot[1]=s.toInt();
+                    PORTF=PORTF^(1<<No);
+                    ASM_delayMicro(St_1Shot[1]);
+                    PORTF=PORTF^(1<<No);
+                    Serial.print("->");
+                  }
+            }else if(recv.startsWith("1SHOT2")){
+                  s =recv.substring(7,recv.indexOf(","));
+                  St_1Shot[0]=s.toInt();
+                  if(St_1Shot[0]>53&&St_1Shot[0]<71){
+                    No=St_1Shot[0]-54;
+                    s =recv.substring(recv.lastIndexOf(",")+1,recv.length()-1);
+                    St_1Shot[1]=s.toInt();
+                    PORTF=PORTF^(1<<No);
+                    for(int i=0;i<St_1Shot[1];i++){
+                      asm volatile("nop \n");
+                    }
+                    PORTF=PORTF^(1<<No);
+                    Serial.print("->");
+                  }
+            }else if(recv.startsWith("1SHOT3")){
+                  s =recv.substring(7,recv.indexOf(","));
+                  St_1Shot[0]=s.toInt();
+                  if(St_1Shot[0]>53&&St_1Shot[0]<71){
+                    No=St_1Shot[0]-54;
+                    s =recv.substring(recv.lastIndexOf(",")+1,recv.length()-1);
+                    St_1Shot[1]=s.toInt();
+                    PORTF=PORTF^(1<<No);
+                    delayMicroseconds(St_1Shot[1]);
+                    PORTF=PORTF^(1<<No);
+                    Serial.print("->");
+                  }
+            }else if(recv.startsWith("1SHOT4")){
+                  s =recv.substring(7,recv.indexOf(","));
+                  St_1Shot[0]=s.toInt();
+                  if(St_1Shot[0]>53&&St_1Shot[0]<71){
+                    No=St_1Shot[0]-54;
+                    s =recv.substring(recv.lastIndexOf(",")+1,recv.length()-1);
+                    St_1Shot[1]=s.toInt();
+                    PORTF=PORTF^(1<<No);
+                    delay(St_1Shot[1]);
+                    PORTF=PORTF^(1<<No);
+                    Serial.print("->");
+                  }
             }else if(recv.startsWith("ALL0")){
                   for (int i=2; i< 54; i++)  {
                     digitalWrite(i,LOW);
                   }
-                  Serial.println("->");
-              }
-          }
-            break;
-        case 1:
-          if(recv != NULL){
-            if(recv.startsWith("D")){
-              if(recv.indexOf("-")>1){
-                s =recv.substring(1,recv.indexOf("-"));
-                int Start_No = s.toInt();
-                s =recv.substring(recv.indexOf("-")+1,recv.indexOf("="));
-                int End_No = s.toInt();
-                s= recv.substring(recv.indexOf("=")+1,recv.indexOf("=")+2);
-                St= s.toInt();
-                  if(Start_No<End_No){
-                    for(i=Start_No;i<=End_No;i++){
-                    Pin_DataWrite(i,St);
-                    }
-                  }else{
-                    Serial.println("INPUT DATA　ERROR");
+                  for (int i=55; i< 70; i++)  {
+                    digitalWrite(i,LOW);
                   }
-                }else{
-                  s =recv.substring(1,recv.indexOf("="));
-                  int No = s.toInt();
-                  s= recv.substring(recv.indexOf("=")+1,recv.indexOf("=")+2);
-                  St= s.toInt();
-                  Pin_DataWrite(No,St);
+                Serial.print("->");
+            }else if(recv.startsWith("ALLOFF")){
+                  for (int i=2; i< 70; i++)  {
+                    digitalWrite(i,LOW);
+                  }
+                Serial.print("->");
+            }else if(recv.startsWith("BLINK_LED")){
+                  for (int i=0; i< 10; i++)  {
+                    delay(70);
+                    digitalWrite(54,LOW);
+                    delay(100);
+                    digitalWrite(54,HIGH);
+                  }
+                Serial.print("->");
+            } else if(recv.startsWith("H")){
+                  strlen=recv.length();
+                  recv=recv.substring(1,21);
+                  j=0;
+                  strlen=recv.length();
+                  for(k=1;k<=5;k++){
+                    Writedata=recv.substring(strlen-4,strlen);
+                    Writedata.toCharArray(charBuf,5);
+                    Data=strtol(charBuf,NULL,16);
+                    for(i=0;i<=15;i++){
+                      Pin_St2[j]=(Data&(1<<(i)))>>(i);
+                      j++;
+                    }
+                    strlen=strlen-4;
+                  }
+                Pin_St2[54]=1;
+                for(i=2;i<70;i++){
+                  digitalWrite(i,Pin_St2[i]);
+                  }
+                 Serial.print("->");
+            }else if(recv.startsWith("J")){
+                  recvD=recv;
+                  strlen=recv.length();
+                  recv=recv.substring(1,21);
+                  j=0;
+                  strlen=recv.length();
+                  for(k=1;k<=5;k++){                    
+                    Writedata=recv.substring(strlen-4,strlen);
+                    Writedata.toCharArray(charBuf,5);
+                    Data=strtol(charBuf,NULL,16);
+                    for(i=0;i<=15;i++){
+                      Pin_St2[j]=(Data&(1<<(i)))>>(i);
+                      j++;
+                    }
+                    strlen=strlen-4;
+                  }
+                  recv=recvD;
+                  strlen=recv.length();
+                  recv=recv.substring(22,42);
+                  j=0;
+                  strlen=recv.length();
+                  for(k=1;k<=5;k++){
+                    Writedata=recv.substring(strlen-4,strlen);
+                    Writedata.toCharArray(charBuf,5);
+                    Data=strtol(charBuf,NULL,16);
+                    for(i=0;i<=15;i++){
+                      Pin_Dt2[j]=(Data&(1<<(i)))>>(i);
+                      j++;
+                    }
+                    strlen=strlen-4;
+                  }
+                  Pin_Dt2[54]=1;
+                  for(i=2;i<70;i++){
+                    if(Pin_St2[i]==1){
+                      digitalWrite(i,Pin_Dt2[i]);
+                    }
+                  }
+                 Serial.print("->");
                 }
-                Pin_All_Print();   
-              }
-            }
-          }  
-}
+          }
+  }   
+ 
